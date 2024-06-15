@@ -16,4 +16,4 @@ policy = TensorDictModule(
     out_keys=["action"],
 )
 
-rollout = env.rollout(max_steps=1, policy=policy) # 
+rollout = env.rollout(max_steps=10, policy=policy) # 
