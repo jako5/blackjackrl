@@ -1,0 +1,243 @@
+Hello @vmoens and everybody else,
+
+I am taking my first steps with torchRL by implementing a very basic RL approach which should be based on a self-build Blackjack Engine and essentially approximate a Decision Tale for draw decisions. I have successfully implemented the torchRL environment, which passes the check_env_specs sanity check. Unfortunately, I am completely stuck trying to work with the environment using even the simplest possible model.
+
+I have implemented all observation values as scalar tensors. Is there some requirement that the inputs need to be at least 1D?
+
+## Code
+
+All Code is availible here: https://github.com/jako5/blackjackrl
+
+## Environment Definition (BlackjackEnv.py)
+
+```python
+from Blackjack import *
+from torchrl.envs import EnvBase
+from torchrl.envs.utils import check_env_specs
+from torchrl.data import BoundedTensorSpec, CompositeSpec,BinaryDiscreteTensorSpec, UnboundedContinuousTensorSpec, DiscreteTensorSpec
+from tensordict import TensorDict, TensorDictBase
+import torch
+
+class BlackjackEnv(EnvBase):
+    def __init__(self, device="cpu"): # TBD seed
+        super().__init__(device=device) # TBD batching
+        self.agent = Blackjack(DECKS=4,
+                               LOG=False,
+                               PLOT=False,
+                               DRAW_STRATEGY="Manual",
+                               BET_STRATEGY="Constant",
+                               THRESHOLD=0,
+                               MAXROUNDS=np.inf)
+        self._make_spec()
+
+        self.actionmap = ["hit", "stand", "double", "split"]
+
+    
+    def getReturnTensordict(self):
+        return TensorDict({"observation":self.agent.get_state(),
+                           "reward": self.agent.get_reward(),
+                           "done": self.agent.get_done()})
+    
+    def _reset(self,batch_size=None):
+        while True:
+            self.agent.shuffle_cardbank()
+            self.agent.prepare_game()
+            instant_win = self.agent.react_to_roundstart()
+            if not instant_win:
+                return TensorDict({"observation":self.agent.get_state(),
+                                   "done": self.agent.get_done()})
+    
+    
+    # Apply action and return next_state, reward, done, info
+    def _step(self, tensordict):
+
+        # Execute player action, adjust state
+        self.agent.react_to_action(self.actionmap[tensordict["action"]])
+
+        ### --- Round ends here --- ###
+
+        # If Player has not finished the round, initiate new round
+        if not self.agent.get_done():
+            self.agent.react_to_roundstart()
+
+        return self.getReturnTensordict()
+    
+    def _make_spec(self):
+        # Define the shape and type of observations that the agent receives from the environment.
+        self.observation_spec = CompositeSpec({
+            "observation": CompositeSpec(
+                playerhandval = DiscreteTensorSpec(21), # possible states: 0-21
+                dealerhandval = DiscreteTensorSpec(21), # possible states: 0-21
+                playerace  = DiscreteTensorSpec(2), # possible states: False, True
+                playerpair = DiscreteTensorSpec(2), # possible states: False, True
+            )}
+        )
+
+        # Define the shape and type of actions that the agent can take in the environment
+        self.action_spec = DiscreteTensorSpec(4)
+
+        # Define the shape and type of rewards that the agent receives from the environment
+        self.reward_spec = UnboundedContinuousTensorSpec(shape=(1,1))
+
+        # Define the shape and type of the info that the agent receives from the environment
+        self.done_spec = BinaryDiscreteTensorSpec(1) # 
+
+    
+    def _set_seed(self, seed: int | None):
+        rng = torch.manual_seed(seed)
+        self.rng = rng
+
+
+if __name__ == '__main__':
+
+    env = BlackjackEnv()
+
+    # print("\nFAKE TENSOR DICT:\n")
+    # print(env.fake_tensordict())
+
+    # print("\nREAL TENSOR DICT:\n")
+    # print(env.rollout(10))
+    
+    check_env_specs(env)
+
+    ro = env.rollout(150)
+    print(ro)
+
+   # no problems, passes without a problem
+```
+
+## Rollout Example
+
+```bash
+TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+        done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int8, is_shared=False),
+        next: TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int8, is_shared=False),
+                observation: TensorDict(
+                    fields={
+                        dealerhandval: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        playerace: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        playerhandval: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        playerpair: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([1]),
+                    device=None,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int8, is_shared=False)},
+            batch_size=torch.Size([1]),
+            device=None,
+            is_shared=False),
+        observation: TensorDict(
+            fields={
+                dealerhandval: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                playerace: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                playerhandval: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+                playerpair: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([1]),
+            device=None,
+            is_shared=False),
+        terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int8, is_shared=False)},
+    batch_size=torch.Size([1]),
+    device=None,
+    is_shared=False)
+```
+
+
+
+
+
+## (trying to) train the model (trainModel.py)
+
+```python
+import torch
+from BlackjackEnv import BlackjackEnv
+from tensordict.nn import TensorDictModule, TensorDictSequential as Seq
+
+# Environment Initialization
+env = BlackjackEnv()
+
+# Model Initialization
+module = torch.nn.LazyLinear(out_features=1)
+
+# Policy Initialization
+policy = TensorDictModule(
+    module,
+    in_keys=["observation"],
+    out_keys=["action"],
+)
+
+# Rollout
+rollout = env.rollout(max_steps=10, policy=policy) # 
+```
+
+## Output
+
+```bash
+RuntimeError: TensorDictModule failed with operation
+    LazyLinear(in_features=0, out_features=1, bias=True)
+    in_keys=['observation']
+    out_keys=['action'].
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\jakob\Documents\Master Leipzig\BlackjackRL\BlackjackRLCode\trainModel.py", line 19, in <module>
+    rollout = env.rollout(max_steps=10, policy=policy) #
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torchrl\envs\common.py", line 2562, in rollout
+    tensordicts = self._rollout_stop_early(**kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torchrl\envs\common.py", line 2631, in _rollout_stop_early
+    tensordict = policy(tensordict)
+                 ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\common.py", line 289, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\_contextlib.py", line 126, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\utils.py", line 261, in wrapper
+    return func(_self, tensordict, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\common.py", line 1224, in forward
+    raise err from RuntimeError(
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\common.py", line 1198, in forward
+    raise err
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\common.py", line 1184, in forward
+    tensors = self._call_module(tensors, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\tensordict\nn\common.py", line 1141, in _call_module
+    out = self.module(*tensors, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\module.py", line 1561, in _call_impl
+    args_kwargs_result = hook(self, args, kwargs)  # type: ignore[misc]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\lazy.py", line 252, in _infer_parameters
+    module.initialize_parameters(*args, **kwargs)
+  File "C:\Users\jakob\.virtualenvs\BlackjackRL\Lib\site-packages\torch\nn\modules\linear.py", line 259, in initialize_parameters
+    self.in_features = input.shape[-1]
+                       ~~~~~~~~~~~^^^^
+IndexError: tuple index out of range
+```
+
+## Possible Reason
+
+Incompetence
+
+## Checklist
+
+- [x] I have checked that there is no similar issue in the repo (**required**)
+- [x] I have read the [documentation](https://github.com/pytorch/rl/tree/main/docs/) (**required**)
+- [x] I have provided a minimal working example to reproduce the bug (**required**)
