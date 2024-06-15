@@ -129,6 +129,10 @@ class Blackjack:
             "dealerhandval": dealerhandval,
             "playerace": playeraces,
             "playerpair": int(playerpair), # TEMP Solution
+            # "playerhandval": torch.tensor(playerhandval),
+            # "dealerhandval": torch.tensor(dealerhandval),
+            # "playerace": torch.tensor(playeraces),
+            # "playerpair": torch.tensor(int(playerpair)), # TEMP Solution
         })
         
     def get_action(self):

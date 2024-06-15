@@ -7,7 +7,7 @@ import torch
 
 
 class BlackjackEnv(EnvBase):
-    def __init__(self, seed=None, device="cpu"): # TBD seed
+    def __init__(self, device="cpu"): # TBD seed
         super().__init__(device=device) # TBD batching
         self.agent = Blackjack(DECKS=4,
                                LOG=False,
@@ -22,7 +22,7 @@ class BlackjackEnv(EnvBase):
 
     
     def getReturnTensordict(self):
-        return TensorDict({**self.agent.get_state(),
+        return TensorDict({"observation":self.agent.get_state(),
                            "reward": self.agent.get_reward(),
                            "done": self.agent.get_done()})
     
@@ -32,9 +32,8 @@ class BlackjackEnv(EnvBase):
             self.agent.prepare_game()
             instant_win = self.agent.react_to_roundstart()
             if not instant_win:
-                return TensorDict({**self.agent.get_state(),
-                           #"reward": self.agent.get_reward(),
-                           "done": self.agent.get_done()})
+                return TensorDict({"observation":self.agent.get_state(),
+                                   "done": self.agent.get_done()})
     
     
     # Apply action and return next_state, reward, done, info
@@ -53,11 +52,13 @@ class BlackjackEnv(EnvBase):
     
     def _make_spec(self):
         # Define the shape and type of observations that the agent receives from the environment.
-        self.observation_spec = CompositeSpec(
-            playerhandval = DiscreteTensorSpec(21), # possible states: 0-21
-            dealerhandval = DiscreteTensorSpec(21), # possible states: 0-21
-            playerace = DiscreteTensorSpec(2), # possible states: False, True
-            playerpair = DiscreteTensorSpec(2), # possible states: False, True
+        self.observation_spec = CompositeSpec({
+            "observation": CompositeSpec(
+                playerhandval = DiscreteTensorSpec(21), # possible states: 0-21
+                dealerhandval = DiscreteTensorSpec(21), # possible states: 0-21
+                playerace  = DiscreteTensorSpec(2), # possible states: False, True
+                playerpair = DiscreteTensorSpec(2), # possible states: False, True
+            )}
         )
 
         # Define the shape and type of actions that the agent can take in the environment
@@ -75,15 +76,17 @@ class BlackjackEnv(EnvBase):
         self.rng = rng
 
 
-    
-
 if __name__ == '__main__':
-    env = BlackjackEnv()
-    #env.reset()
 
+    env = BlackjackEnv()
+
+    # print("\nFAKE TENSOR DICT:\n")
+    # print(env.fake_tensordict())
+
+    # print("\nREAL TENSOR DICT:\n")
+    # print(env.rollout(10))
+    
     check_env_specs(env)
-    # state = env.reset()
-    # action = 1
-    # next_state, reward, done, info = env.step(action)
-    # print(state, next_state, reward, done, info)
-    # env.close()
+
+    ro = env.rollout(150)
+    print(ro)
