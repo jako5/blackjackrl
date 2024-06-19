@@ -21,11 +21,6 @@ class BlackjackEnv(EnvBase):
         self.actionmap = ["hit", "stand", "double", "split"]
 
     
-    def getReturnTensordict(self):
-        return TensorDict({"observation":self.agent.get_state(),
-                           "reward": self.agent.get_reward(),
-                           "done": self.agent.get_done()})
-    
     def _reset(self,batch_size=None):
         while True:
             self.agent.shuffle_cardbank()
@@ -48,27 +43,32 @@ class BlackjackEnv(EnvBase):
         if not self.agent.get_done():
             self.agent.react_to_roundstart()
 
-        return self.getReturnTensordict()
+        return TensorDict({"observation":self.agent.get_state(),
+                           #"action": tensordict["action"],
+                           "reward": self.agent.get_reward(),
+                           "done": self.agent.get_done()})
     
     def _make_spec(self):
         # Define the shape and type of observations that the agent receives from the environment.
         self.observation_spec = CompositeSpec({
             "observation": CompositeSpec(
-                playerhandval = DiscreteTensorSpec(21), # possible states: 0-21
-                dealerhandval = DiscreteTensorSpec(21), # possible states: 0-21
-                playerace  = DiscreteTensorSpec(2), # possible states: False, True
-                playerpair = DiscreteTensorSpec(2), # possible states: False, True
+                playerhandval = DiscreteTensorSpec(21, shape=(1,)), # possible states: 0-21
+                dealerhandval = DiscreteTensorSpec(21, shape=(1,)), # possible states: 0-21
+                playerace  = DiscreteTensorSpec(2, shape=(1,)), # possible states: False, True
+                playerpair = DiscreteTensorSpec(2, shape=(1,)), # possible states: False, True
             )}
         )
 
         # Define the shape and type of actions that the agent can take in the environment
-        self.action_spec = DiscreteTensorSpec(4)
+        self.action_spec = DiscreteTensorSpec(4, shape=(1,))
 
         # Define the shape and type of rewards that the agent receives from the environment
         self.reward_spec = UnboundedContinuousTensorSpec(shape=(1,1))
 
         # Define the shape and type of the info that the agent receives from the environment
-        self.done_spec = BinaryDiscreteTensorSpec(1) # 
+        self.done_spec = BinaryDiscreteTensorSpec(1, shape=(1,)) #
+
+        #print(self.observation_spec)
 
     
     def _set_seed(self, seed: int | None):
@@ -79,14 +79,17 @@ class BlackjackEnv(EnvBase):
 if __name__ == '__main__':
 
     env = BlackjackEnv()
+    #obspecrand = env.observation_spec.rand()
+
+    #print(obspecrand[("observation", "playerhandval")],obspecrand[("observation", "dealerhandval")],obspecrand[("observation", "playerace")],obspecrand[("observation", "playerpair")])
 
     # print("\nFAKE TENSOR DICT:\n")
     # print(env.fake_tensordict())
 
     # print("\nREAL TENSOR DICT:\n")
-    # print(env.rollout(10))
+    ro = env.rollout(10)
     
     check_env_specs(env)
 
-    ro = env.rollout(150)
-    print(ro)
+    # ro = env.rollout(150)
+    # print(ro)

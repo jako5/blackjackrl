@@ -125,10 +125,10 @@ class Blackjack:
         playerhandval, playeraces, playerpair = self.calculate_hand_value(self.player_hand, return_aces_pairs=True)
         dealerhandval = self.get_card_value(self.dealer_hand[0])
         return TensorDict({
-            "playerhandval": playerhandval,
-            "dealerhandval": dealerhandval,
-            "playerace": playeraces,
-            "playerpair": int(playerpair), # TEMP Solution
+            "playerhandval": torch.tensor([playerhandval]),
+            "dealerhandval": torch.tensor([dealerhandval]),
+            "playerace": torch.tensor([playeraces], dtype=torch.int64),
+            "playerpair": torch.tensor([playerpair], dtype=torch.int64), # TEMP Solution
             # "playerhandval": torch.tensor(playerhandval),
             # "dealerhandval": torch.tensor(dealerhandval),
             # "playerace": torch.tensor(playeraces),
