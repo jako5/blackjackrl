@@ -5,6 +5,10 @@ import torch
 from BlackjackEnv import BlackjackEnv
 from matplotlib import pyplot as plt
 import time
+from torchrl.modules import EGreedyModule, MLP, QValueModule
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torchrl.collectors import SyncDataCollector
+from torchrl.data import LazyTensorStorage, ReplayBuffer
 
 
 # spec = CompositeSpec({("observation", "a"): DiscreteTensorSpec(21, shape=(1,)), ("observation", "b"): DiscreteTensorSpec(21, shape=(1,))})
@@ -15,44 +19,29 @@ env = BlackjackEnv()
 t = CatTensors(in_keys=[("observation", "playerhandval"), ("observation", "dealerhandval"), ("observation", "playerace"),("observation", "playerpair")], out_key=("observation", "aggregate"))
 
 t_dtype = DTypeCastTransform(dtype_in=torch.long, dtype_out=torch.float32)
-# print(spec.rand())
-# print(t(spec.rand()))
 
 t_step = StepCounter(max_steps=10)
 
 module = TensorDictModule(torch.nn.LazyLinear(3), in_keys=[("observation", "aggregate")], out_keys=["action_value"])
 
 env = env.append_transform(t).append_transform(t_dtype).append_transform(t_step)
-spec = env.observation_spec
-infer = module(spec.rand())
 
-# OLD; WITHOUT TRANSFORMS
+# Manual test
 # spec = env.observation_spec
-# infer = module(t_dtype(t(spec.rand())))
-
-
-m = torch.nn.Softmax(dim=0)
-probs = m(infer["action_value"])
-print(probs)
-# plt.bar(range(4), probs.detach().numpy())
-# plt.show()
-
-
-from torchrl.modules import EGreedyModule, MLP, QValueModule
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+# infer = module(spec.rand())
+# m = torch.nn.Softmax(dim=0)
+# probs = m(infer["action_value"])
+# print(probs)
 
 policy = Seq(module, QValueModule(spec=env.action_spec))
+
 exploration_module = EGreedyModule(
     env.action_spec, annealing_num_steps=100_000, eps_init=0.5
 )
 policy_explore = Seq(policy, exploration_module)
 
-
-from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyTensorStorage, ReplayBuffer
-
-init_rand_steps = 500
-frames_per_batch = 10
+init_rand_steps = 5000
+frames_per_batch = 100
 optim_steps = 10
 collector = SyncDataCollector(
     env,
@@ -81,25 +70,26 @@ for i, data in enumerate(collector):
     rb.extend(data)
     max_length = rb[:]["next", "step_count"].max()
     if len(rb) > init_rand_steps:
-        print(len(rb))
+        print(total_episodes)
         # Optim loop (we do several optim steps
         # per batch collected for efficiency)
         for _ in range(optim_steps):
+            
             sample = rb.sample(128)
             loss_vals = loss(sample)
             loss_vals["loss"].backward()
             optim.step()
             optim.zero_grad()
+
+            #print(sample["next"]["reward"].sum())
+            
             # Update exploration factor
             exploration_module.step(data.numel())
+            
             # Update target params
             updater.step()
-            # if i % 10:
-            #     torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
             total_count += data.numel()
             total_episodes += data["next", "done"].sum()
-    if max_length > 200:
-        break
 
-t1 = time.time()
+
 
