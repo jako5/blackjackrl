@@ -119,12 +119,15 @@ class Blackjack:
         return Tensor([self.balance])
 
     def get_done(self):
-        return torch.tensor([int(not self.game_running)], dtype=torch.int8)
+        done_tensor = torch.tensor([not self.game_running])
+        #done_tensor = torch.tensor([int(not self.game_running)], dtype=torch.int8)
+        #print(done_tensor)
+        return done_tensor
 
     def get_state(self):
         playerhandval, playeraces, playerpair = self.calculate_hand_value(self.player_hand, return_aces_pairs=True)
         dealerhandval = self.get_card_value(self.dealer_hand[0])
-        return TensorDict({
+        return_dict = TensorDict({
             "playerhandval": torch.tensor([playerhandval]),
             "dealerhandval": torch.tensor([dealerhandval]),
             "playerace": torch.tensor([playeraces], dtype=torch.int64),
@@ -134,6 +137,8 @@ class Blackjack:
             # "playerace": torch.tensor(playeraces),
             # "playerpair": torch.tensor(int(playerpair)), # TEMP Solution
         })
+        #print(return_dict["playerhandval"], return_dict["dealerhandval"], return_dict["playerace"], return_dict["playerpair"])
+        return return_dict
         
     def get_action(self):
         action = None

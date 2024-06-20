@@ -18,10 +18,13 @@ class BlackjackEnv(EnvBase):
                                MAXROUNDS=np.inf)
         self._make_spec()
 
-        self.actionmap = ["hit", "stand", "double", "split"]
+        self.actionmap = ["h", "s", "d"] # TODO split (v)
 
     
     def _reset(self,batch_size=None):
+
+        #print("RESET")
+
         while True:
             self.agent.shuffle_cardbank()
             self.agent.prepare_game()
@@ -33,8 +36,11 @@ class BlackjackEnv(EnvBase):
     
     # Apply action and return next_state, reward, done, info
     def _step(self, tensordict):
+        
+        #print("STEP")
 
         # Execute player action, adjust state
+        #print("ACTION:", tensordict["action"])
         self.agent.react_to_action(self.actionmap[tensordict["action"]])
 
         ### --- Round ends here --- ###
@@ -52,21 +58,22 @@ class BlackjackEnv(EnvBase):
         # Define the shape and type of observations that the agent receives from the environment.
         self.observation_spec = CompositeSpec({
             "observation": CompositeSpec(
-                playerhandval = DiscreteTensorSpec(21, shape=(1,)), # possible states: 0-21
-                dealerhandval = DiscreteTensorSpec(21, shape=(1,)), # possible states: 0-21
-                playerace  = DiscreteTensorSpec(2, shape=(1,)), # possible states: False, True
+                playerhandval = DiscreteTensorSpec(31, shape=(1,)), # possible states: 0-30 (20 + Draw King)
+                dealerhandval = DiscreteTensorSpec(31, shape=(1,)), # possible states: 0-30
+                playerace  = DiscreteTensorSpec(3, shape=(1,)), # possible states: Number of Aces
                 playerpair = DiscreteTensorSpec(2, shape=(1,)), # possible states: False, True
             )}
         )
 
-        # Define the shape and type of actions that the agent can take in the environment
-        self.action_spec = DiscreteTensorSpec(4, shape=(1,))
+        # Define the shape and type of actions
+        self.action_spec = DiscreteTensorSpec(3, shape=(1,))
 
         # Define the shape and type of rewards that the agent receives from the environment
-        self.reward_spec = UnboundedContinuousTensorSpec(shape=(1,1))
+        self.reward_spec = UnboundedContinuousTensorSpec(shape=(1))
 
-        # Define the shape and type of the info that the agent receives from the environment
-        self.done_spec = BinaryDiscreteTensorSpec(1, shape=(1,)) #
+        # Define the shape and type of the done space
+        #self.done_spec = BinaryDiscreteTensorSpec(1, shape=(1,)) #
+        self.done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(1,))
 
         #print(self.observation_spec)
 
@@ -87,9 +94,13 @@ if __name__ == '__main__':
     # print(env.fake_tensordict())
 
     # print("\nREAL TENSOR DICT:\n")
-    ro = env.rollout(10)
-    
-    check_env_specs(env)
+    # ro = env.rollout(3)
+    # print(ro)
 
-    # ro = env.rollout(150)
+    for _ in range(10):
+        check_env_specs(env)
+
+    #print(env.done_spec)
+
+    #ro = env.rollout(150)
     # print(ro)
