@@ -42,6 +42,7 @@ class Blackjack:
         self.split_depot = None
         self.progess_balance = []
         self.progess_hilocount = []
+        self.reward = 0
 
         self.player_hand = None
         self.dealer_hand = None
@@ -116,28 +117,22 @@ class Blackjack:
             print(f"Dealer's hand: {stringify_hand([self.dealer_hand[0], ['X', 'X', None]])}")
 
     def get_reward(self):
-        return Tensor([self.balance])
+        return Tensor([0 if not self.game_running else self.reward])
 
     def get_done(self):
         done_tensor = torch.tensor([not self.game_running])
-        #done_tensor = torch.tensor([int(not self.game_running)], dtype=torch.int8)
-        #print(done_tensor)
         return done_tensor
 
     def get_state(self):
         playerhandval, playeraces, playerpair = self.calculate_hand_value(self.player_hand, return_aces_pairs=True)
         dealerhandval = self.get_card_value(self.dealer_hand[0])
+        #print(dealerhandval)
         return_dict = TensorDict({
             "playerhandval": torch.tensor([playerhandval]),
             "dealerhandval": torch.tensor([dealerhandval]),
             "playerace": torch.tensor([playeraces], dtype=torch.int64),
             "playerpair": torch.tensor([playerpair], dtype=torch.int64), # TEMP Solution
-            # "playerhandval": torch.tensor(playerhandval),
-            # "dealerhandval": torch.tensor(dealerhandval),
-            # "playerace": torch.tensor(playeraces),
-            # "playerpair": torch.tensor(int(playerpair)), # TEMP Solution
         })
-        #print(return_dict["playerhandval"], return_dict["dealerhandval"], return_dict["playerace"], return_dict["playerpair"])
         return return_dict
         
     def get_action(self):
@@ -221,15 +216,15 @@ class Blackjack:
 
         if result == "win_by_blackjack":
             self.balance += (self.bet * 5 / 2)
-            self.lastresult = "win"
+            self.lastresult, self.reward = "win", 2
         elif "win" in result:
             self.balance += (self.bet * 4 / 2)
-            self.lastresult = "win"
+            self.lastresult, self.reward = "win", 5
         elif "tie" in result:
             self.balance += self.bet
-            self.lastresult = "tie"
+            self.lastresult, self.reward = "tie", 0
         elif "lose" in result:
-            self.lastresult = "lose"
+            self.lastresult, self.reward = "lose", -7
             pass
         else:
             assert False
@@ -340,7 +335,7 @@ class Blackjack:
                 else:
                     self.finish_game("tie", "It's a tie!")
 
-    def prepare_game(self):
+    def prepare_game(self,reset_balance=False):
     
         self.gameround += 1
 

@@ -27,7 +27,7 @@ class BlackjackEnv(EnvBase):
 
         while True:
             self.agent.shuffle_cardbank()
-            self.agent.prepare_game()
+            self.agent.prepare_game(reset_balance=True)
             instant_win = self.agent.react_to_roundstart()
             if not instant_win:
                 return TensorDict({"observation":self.agent.get_state(),
@@ -36,11 +36,8 @@ class BlackjackEnv(EnvBase):
     
     # Apply action and return next_state, reward, done, info
     def _step(self, tensordict):
-        
-        #print("STEP")
 
         # Execute player action, adjust state
-        #print("ACTION:", tensordict["action"])
         self.agent.react_to_action(self.actionmap[tensordict["action"]])
 
         ### --- Round ends here --- ###
@@ -50,7 +47,6 @@ class BlackjackEnv(EnvBase):
             self.agent.react_to_roundstart()
 
         return TensorDict({"observation":self.agent.get_state(),
-                           #"action": tensordict["action"],
                            "reward": self.agent.get_reward(),
                            "done": self.agent.get_done()})
     
